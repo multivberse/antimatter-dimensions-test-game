@@ -1,0 +1,177 @@
+<HTML>
+    <head>
+        <title> text </title>
+    </head>
+
+    <body>
+        <canvas id=myCanvas width=640 height=400 style="background-color: #202020">
+         
+        </canvas>
+
+        
+        <script>
+        ctx = myCanvas.getContext("2d"); 
+        FPS = 60
+        frameTicks = 0
+        money = 10
+        moneyPerSec = 0
+        items = [{amount: 0, multiplier: 1, cost: 10, costMult: 1e3},
+                {amount: 0, multiplier: 1, cost: 100, costMult: 1e4},
+                {amount: 0, multiplier: 1, cost: 1e4, costMult: 1e5},
+                {amount: 0, multiplier: 1, cost: 1e6, costMult: 1e6},
+                {amount: 0, multiplier: 1, cost: 1e9, costMult: 1e8},
+                {amount: 0, multiplier: 1, cost: 1e13, costMult: 1e10},
+                {amount: 0, multiplier: 1, cost: 1e18, costMult: 1e12},
+                {amount: 0, multiplier: 1, cost: 1e24, costMult: 1e15}]
+        tickspeed = {speed: 1, interval: 0.89, cost: 1e3, costMult: 10}
+        growthRates = [0, 0, 0, 0, 0, 0, 0, 0]
+        
+        function setVariables() {
+        money = 10
+        moneyPerSec = 0
+        items = [{amount: 0, multiplier: 1, cost: 10, costMult: 1e3},
+                {amount: 0, multiplier: 1, cost: 100, costMult: 1e4},
+                {amount: 0, multiplier: 1, cost: 1e4, costMult: 1e5},
+                {amount: 0, multiplier: 1, cost: 1e6, costMult: 1e6},
+                {amount: 0, multiplier: 1, cost: 1e9, costMult: 1e8},
+                {amount: 0, multiplier: 1, cost: 1e13, costMult: 1e10},
+                {amount: 0, multiplier: 1, cost: 1e18, costMult: 1e12},
+                {amount: 0, multiplier: 1, cost: 1e24, costMult: 1e15}]
+        tickspeed = {speed: 1, interval: 0.89, cost: 1e3, costMult: 10}
+        }
+
+        ctx.font = "italic bold 18px mono"
+        
+        var gradient = ctx.createLinearGradient(0, 0, myCanvas.width, 0);
+        gradient.addColorStop("0", "magenta");
+        gradient.addColorStop("0.5", "blue");
+        gradient.addColorStop("1.0", "red");
+
+        ctx.fillStyle = gradient
+        ctx.strokeStyle = "black"
+        ctx.lineWidth = 4
+        ctx.lineJoin = "round"
+        
+        function abbrev(variable, dec) {
+            return ((variable >= 1e6) ? variable.toExponential(3) : variable.toFixed(dec))
+        }
+        
+        function drawUI() {
+            ctx.fillStyle = "#101010"
+            ctx.fillRect(0, 0, myCanvas.width, 72)
+            print1(abbrev(money, 1), myCanvas.width - 20, 40)
+            print2(abbrev(moneyPerSec, 1) + " / sec", myCanvas.width - 20, 60, "right", "white", "italic 12px mono")
+            print2("Tickspeed: " + abbrev(tickspeed.speed, 2) + " / sec", 20, 28, "left", "white", "italic 12px mono")
+            print2("Divide the tick interval by " + tickspeed.interval + ".", 20, 44)
+            print2("[T] Cost: " + abbrev(tickspeed.cost, 0), 20, 60, "left", checkForAfford(tickspeed.cost), "italic 12px mono")
+            var i = 0
+            while (i < 8) {
+                print2("Dimension " + (i + 1) + " x" + ((items[i].multiplier >= 1e6) ? items[i].multiplier.toExponential(3) : items[i].multiplier.toFixed(1)), 20, 100+(30*i), "left", "white", "14px mono");
+                print2(abbrev(items[i].amount, 0) + ((i == 7) ? "" : " " + growthRates[i]), (myCanvas.width/2) - 40, 100+(30*i), "left", "white", "14px mono");
+                print2("Cost: " + abbrev(items[i].cost, 0) + ((selection == i) ? " <" : ""), myCanvas.width - 20, 100+(30*i), "right", checkForAfford(items[i].cost), ((selection == i) ? "italic 14px mono" : "14px mono"));
+                i++;
+            }
+            print2("Arrow keys to select, spacebar to buy", myCanvas.width/2, myCanvas.height - 10, "center", "gray", "italic 10px mono")
+                
+        }
+        
+        function updatePrint1Gradient(z) {
+            gradient = ctx.createLinearGradient(-myCanvas.width + (z % myCanvas.width), 0, myCanvas.width + (z % myCanvas.width), 0);
+            gradient.addColorStop(0, "#f8f");
+            gradient.addColorStop(1/6, "#ff8");
+            gradient.addColorStop(1/3, "#8ff");
+            gradient.addColorStop(1/2, "#f8f");
+            gradient.addColorStop(2/3, "#ff8");
+            gradient.addColorStop(5/6, "#8ff");
+            gradient.addColorStop(1, "#f8f");
+        }
+        
+        function print1(text, x, y) {
+            ctx.font = "italic bold 18px mono"
+            ctx.textAlign = "right"
+            ctx.strokeStyle = "black"
+            ctx.lineWidth = 4
+            updatePrint1Gradient(frameTicks * 2)
+            ctx.fillStyle = "black"
+            ctx.fillText(text, x+2, y+2)
+            ctx.fillStyle = gradient
+            ctx.fillText(text, x, y)
+        }
+        
+        function print2(text, x, y, a, c, f) {
+            ctx.font = f
+            ctx.textAlign = a
+            ctx.fillStyle = c
+            ctx.fillText(text, x, y)
+        }
+        
+        function calcMPS() {
+            var i = 6
+            var tmp = 0
+            while (i >= 0) {
+                tmp = items[i].amount;
+                items[i].amount += items[i + 1].amount*items[i+1].multiplier*tickspeed.speed / FPS;
+                tmp = items[i].amount / tmp
+                if (isNaN(tmp)) {
+                    growthRates[i] = ""
+                } else {
+                    growthRates[i] = "(+" + ((tmp - 1)*100*FPS).toFixed(2) + "%/s)"
+                }
+                i--;
+            }
+            moneyPerSec = items[0].amount*items[0].multiplier*tickspeed.speed;
+            return moneyPerSec / FPS
+        }
+        
+        function checkForBuy(item) {
+            if (money >= ((item == tickspeed.cost) ? tickspeed.cost : items[item].cost)) {
+                money -= ((item == tickspeed.cost) ? tickspeed.cost : items[item].cost);
+                if (item == tickspeed.cost) {
+                    tickspeed.speed /= tickspeed.interval
+                    tickspeed.cost *= tickspeed.costMult
+                } else {
+                    items[item].amount += 10;
+                    items[item].multiplier *= 2
+                    items[item].cost *= items[item].costMult
+                }
+            }
+        }
+        
+        function checkForAfford(item) {
+            if (money >= item) {
+                return "#ffffff"
+            } else {
+                return "#606060"
+            }
+        }
+        
+        var selection = 0
+        function checkKeys(MyEvent) {
+            switch (MyEvent.keyCode) {
+                case 38: if (selection > 0) {selection--};   // up
+                    break;
+                case 40: if (selection < 7) {selection++};   // down
+                    break;
+                case 32: checkForBuy(selection);             // purchase
+                    break;
+                case 84: checkForBuy(tickspeed.cost);        // hmmm...
+            }
+            MyEvent.preventDefault();
+        }
+        
+        
+        function doThing() {
+            frameTicks += 1
+            ctx.clearRect(0, 0, myCanvas.width, myCanvas.height)
+            drawUI();
+            money += calcMPS();
+        }
+        
+        setInterval(doThing, 1000/FPS)
+        addEventListener("keydown", checkKeys);
+
+
+        </script>
+
+    </body>
+</html> 
